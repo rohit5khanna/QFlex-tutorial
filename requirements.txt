@@ -1,0 +1,8 @@
+# For editing/running the notebook locally (not needed for the deployed site).
+#   pip install -r requirements.txt
+marimo>=0.9
+matplotlib>=3.7
+numpy>=1.24
+scipy>=1.10
+# qflex (with the scipy tail-center fallback baked in) from the committed wheel:
+./public/qflex-1.0.0-py3-none-any.whl

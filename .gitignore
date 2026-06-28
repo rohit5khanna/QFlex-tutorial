@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# marimo / export artifacts
+__marimo__/
+_site/
+site/
+*.html
+
+# OS / IDE
+.DS_Store
+.vscode/
+.idea/
+
+# Workflow is added via the GitHub web UI to avoid needing the PAT 'workflow'
+# scope. Kept on disk for reference but untracked. Remove this line if you later
+# grant the scope and want git to manage the workflow.
+.github/
+
+# NOTE: public/*.whl ARE committed on purpose -- they are installed in the
+# browser by the notebook's WASM bootstrap cell.
