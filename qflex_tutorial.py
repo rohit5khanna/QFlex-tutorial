@@ -777,7 +777,9 @@ def _():
     # Asymmetric probabilities (not mirrored about 0.5) keep the 7x7 design matrix
     # well-conditioned, so the unconstrained fit interpolates exactly while still being infeasible.
     p_base = [0.05, 0.15, 0.30, 0.45, 0.60, 0.80, 0.95]
-    x_base = [1.0, 2.0, 3.0, 9.0, 16.0, 18.0, 19.0]  # steep-middle S-shape -> infeasible at K=7
+    # Right-skewed assessments: the exact 7-term fit overfits and is infeasible,
+    # but EVERY constraint below repairs it into a distinct feasible density.
+    x_base = [2.0, 4.0, 7.0, 10.0, 14.0, 19.0, 25.0]
     return p_base, x_base
 
 
@@ -837,12 +839,13 @@ def _(
 def _(fig_base, mo):
     mo.vstack([
         mo.md(
-            "**A genuinely infeasible baseline.** These seven assessments rise steeply through the "
-            "middle. The exact 7-term fit (7 points, 7 terms) **passes through every point**, yet it "
-            "is **non-monotone between them** — \\(Q(p)\\) dips back down, so the quantile density "
+            "**A genuinely infeasible baseline.** These seven right-skewed assessments are fit "
+            "exactly by a 7-term model (7 points, 7 terms), so \\(Q(p)\\) **passes through every "
+            "point** — but the least-squares solution **overfits** with huge oscillating "
+            "coefficients. Between the points \\(Q(p)\\) wiggles back down, so the quantile density "
             "**goes negative** (red region) and the implied PDF would be negative. The distribution "
-            "is *invalid*; the constraints below repair it. (The left axis is zoomed to the data; the "
-            "tails actually shoot off-screen, another symptom of the unconstrained high-order fit.)"
+            "is *invalid*; every constraint below repairs it differently. (The left axis is zoomed "
+            "to the data; the tails actually shoot off-screen, another symptom of the overfit.)"
         ),
         fig_base,
     ])
@@ -962,13 +965,20 @@ def _(c_constraint_dropdown, c_status, fig_constraint, mo):
     mo.vstack([
         mo.md(
             "### Interactive — how each constraint changes the fit\n\n"
-            "Pick a constraint and watch the **coefficients** (right) and the **quantile density** "
-            "(left) respond. `A+` (Theorem 1) forces every shape coefficient ≥ 0 — here that drives "
-            "the tails to zero and leaves a near-uniform body. `TC_mag` / `TC` allow a negative "
-            "center yet keep q(p) > 0. `TL+` / `TA+` only constrain the **tails**, so they cannot "
-            "fix an infeasibility caused by the **center** and stay infeasible here. Each guarantee "
-            "costs some fit accuracy — compare the **SSE** row (in this example `A+` happens to fit "
-            "best, not `TC`)."
+            "The unconstrained fit above is **infeasible**. Here **every** constraint repairs it — "
+            "but each reshapes the density differently. Pick a constraint and watch the "
+            "**coefficients** (right) and the **quantile density** (left) respond, then read the "
+            "**feasible** and **SSE** rows below.\n\n"
+            "- **`TL+` / `TA+`** (Theorem 5 tail conditions) restrict only the *tails*. They are the "
+            "least restrictive, so they hug the data most closely (lowest SSE) — but being tail-only "
+            "they are *necessary, not always sufficient*; here they happen to suffice.\n"
+            "- **`A+`** (Theorem 1) forces *every* shape coefficient ≥ 0 — the strongest structural "
+            "guarantee, giving a smooth, gently unimodal density.\n"
+            "- **`TC_mag` / `TC`** (Propositions 3 & 4) keep the tails positive but allow a "
+            "*moderately negative* center while still certifying q(p) > 0. The a-priori LP bound "
+            "`TC` is the most conservative, so it costs the most fit accuracy.\n\n"
+            "Every guarantee trades a little accuracy for validity — compare the **SSE** row across "
+            "constraints (here it climbs `TL+ < TA+ < A+ < TC_mag < TC`)."
         ),
         c_constraint_dropdown,
         c_status,
