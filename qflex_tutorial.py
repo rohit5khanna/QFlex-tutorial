@@ -616,7 +616,7 @@ def _(fig_basis, mo):
 @app.cell
 def _(mo):
     p_demo = [0.05, 0.10, 0.20, 0.35, 0.50, 0.65, 0.80, 0.90, 0.95]
-    x_demo = [12.0, 14.0, 17.0, 21.0, 25.0, 30.0, 38.0, 48.0, 56.0]
+    x_demo = [10.0, 13.0, 16.0, 20.0, 25.0, 31.0, 39.0, 49.0, 58.0]
     terms_slider = mo.ui.slider(3, 9, value=3, step=1, label="QFlex terms", show_value=True)
     return p_demo, terms_slider, x_demo
 
@@ -643,10 +643,14 @@ def _(QFlex, np, p_demo, plt, terms_slider, x_demo):
     axes_depth[0].legend(fontsize=8)
 
     _pdf = _qf.pdf(_pp)
-    axes_depth[1].plot(_xx, _pdf, color="seagreen", linewidth=2)
+    _pdf_color = "seagreen" if _qf.is_feasible else "firebrick"
+    axes_depth[1].plot(_xx, _pdf, color=_pdf_color, linewidth=2)
     axes_depth[1].set_xlabel("x")
     axes_depth[1].set_ylabel("density")
-    axes_depth[1].set_title(f"Implied PDF   (feasible: {_qf.is_feasible})", fontsize=9)
+    axes_depth[1].set_title(
+        f"Implied PDF   (feasible: {_qf.is_feasible})",
+        fontsize=9, color=("black" if _qf.is_feasible else "firebrick"),
+    )
     axes_depth[1].set_ylim(bottom=0)
     fig_depth.tight_layout()
     return (fig_depth,)
@@ -660,8 +664,10 @@ def _(fig_depth, mo, terms_slider):
             "Nine right-skewed assessments are fit with a varying number of terms. With **3 terms** "
             "the fit is a smooth least-squares approximation (nonzero error). As terms increase the "
             "error shrinks, and at **9 terms = 9 points** the model **interpolates exactly** "
-            "(error ≈ 0). Watch the implied PDF: extra terms add flexibility but can also push the "
-            "fit toward *infeasibility* — the motivation for the monotonicity constraints in Part C."
+            "(error ≈ 0). Watch the implied PDF: it stays **green while feasible** and turns "
+            "**red once the fit becomes infeasible** (here around 7 terms). Extra terms add "
+            "flexibility but can push the fit past validity — the motivation for the monotonicity "
+            "constraints in Part C."
         ),
         terms_slider,
         fig_depth,
