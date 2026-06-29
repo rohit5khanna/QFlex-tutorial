@@ -213,7 +213,12 @@ def _(mo):
     on \((0,1)\) — equivalently, its quantile density \(q(p)=Q'(p)\) is nonnegative. Gilchrist
     (2000) gives a set of transformations that *preserve* validity. The table below lists them;
     use the dropdown on the right to **visualise** each one (building blocks dashed, result in
-    green) and confirm the output stays strictly increasing.
+    green).
+
+    Most rules come with a **condition**. Use the two parameter sliders (θ₁, θ₂) to push each
+    rule across its boundary and watch the result flip between **valid** (strictly increasing) and
+    **invalid** (non-monotone). The two unconditional rules — *reflection* and *addition* — stay
+    valid no matter what, so their sliders have no effect, which is itself the point.
     """)
     return
 
@@ -236,68 +241,111 @@ def _(mo):
 
 
 @app.cell
-def _(np, plt, transform_dropdown):
+def _(mo):
+    ta_p1 = mo.ui.slider(
+        -2.0, 3.0, value=1.5, step=0.25,
+        label="θ₁", show_value=True,
+    )
+    ta_p2 = mo.ui.slider(
+        -2.0, 3.0, value=1.0, step=0.25,
+        label="θ₂", show_value=True,
+    )
+    return ta_p1, ta_p2
+
+
+@app.cell
+def _(mo, np, plt, ta_p1, ta_p2, transform_dropdown):
     _p = np.linspace(0.001, 0.999, 400)
     _R = -np.log(1 - _p)            # right-tail exponential R¹
     _L = np.log(_p)                 # left-tail reflected exponential L¹
     _logit = np.log(_p / (1 - _p))  # logistic quantile function
     _unif = _p.copy()               # uniform(0,1) quantile function
     _choice = transform_dropdown.value
+    _t1 = float(ta_p1.value)
+    _t2 = float(ta_p2.value)
 
     fig_tr, ax_tr = plt.subplots(figsize=(6, 4.3))
+    _monotone_map = (_choice == "monotone")
 
-    if _choice == "monotone":
-        _out = np.exp(_logit)
-        ax_tr.plot(_p, _logit, linestyle="--", color="tab:blue", alpha=0.8,
-                   linewidth=1.3, label="Q(p) = logit")
+    if _choice == "affine":
+        _inputs = [("Q(p) = logit", _logit)]
+        _out = _t2 + _t1 * _logit
+        _title = f"Affine shift:  {_t2:.2f} + {_t1:.2f}·Q(p)"
+        _cond = "valid ⇔ slope θ₁ > 0  (θ₂ only shifts, never breaks validity)"
+        _active = "**θ₁** = slope b   ·   **θ₂** = shift a"
+    elif _choice == "reflection":
+        _inputs = [("Q(p) = R¹(p)", _R)]
+        _out = _L  # −Q(1−p) with Q = R¹  →  ln(p)
+        _title = "Reflection:  −Q(1−p)"
+        _cond = "unconditionally valid — no parameter can break it"
+        _active = "*no active parameters* (sliders have no effect here)"
+    elif _choice == "addition":
+        _inputs = [("Q₁ = R¹", _R), ("Q₂ = L¹", _L)]
+        _out = _R + _L
+        _title = "Addition:  Q₁ + Q₂ = logit"
+        _cond = "unconditionally valid — sum of valid QFs is always valid"
+        _active = "*no active parameters* (sliders have no effect here)"
+    elif _choice == "poscomb":
+        _inputs = [("Q₁ = logit", _logit), ("Q₂ = R¹", _R)]
+        _out = _t1 * _logit + _t2 * _R
+        _title = f"Combination:  {_t1:.2f}·Q₁ + {_t2:.2f}·Q₂"
+        _cond = "valid ⇔ θ₁ ≥ 0 AND θ₂ ≥ 0  (a negative weight can tip it)"
+        _active = "**θ₁** = weight on Q₁   ·   **θ₂** = weight on Q₂"
+    elif _choice == "product":
+        _f2 = _unif + _t1
+        _inputs = [("Q₁ = R¹ (≥0)", _R), (f"Q₂ = p + {_t1:.2f}", _f2)]
+        _out = _R * _f2
+        _title = f"Product:  R¹ · (p + {_t1:.2f})"
+        _cond = "valid ⇔ both factors ≥ 0 on (0,1)  ⇔  θ₁ ≥ 0"
+        _active = "**θ₁** = shift of 2nd factor (push it below 0 to break it)"
+    else:  # monotone
+        _inputs = [("Q(p) = logit", _logit)]
+        _out = np.exp(_t1 * _logit)
+        _title = f"Monotone map:  T(Q) = exp({_t1:.2f}·Q)"
+        _cond = "valid ⇔ T non-decreasing  ⇔  θ₁ > 0"
+        _active = "**θ₁** = rate in T(y) = exp(θ₁·y)"
+
+    _valid = bool(np.all(np.diff(_out) > 0))
+    _res_color = "tab:green" if _valid else "tab:red"
+
+    if _monotone_map:
+        ax_tr.plot(_p, _inputs[0][1], linestyle="--", color="tab:blue",
+                   alpha=0.8, linewidth=1.3, label=_inputs[0][0])
         ax_tr.set_ylabel("Q(p)")
         _ax2 = ax_tr.twinx()
-        _ax2.plot(_p, _out, color="tab:green", linewidth=2.4, label="T(Q) = exp(Q)")
-        _ax2.set_ylabel("T(Q) = exp(Q)")
+        _ax2.plot(_p, _out, color=_res_color, linewidth=2.4, label="result T(Q)")
+        _ax2.set_ylabel("T(Q)")
         ax_tr.legend(fontsize=8, loc="upper left")
         _ax2.legend(fontsize=8, loc="lower right")
-        _title = "Monotone map:  T(Q) = exp(Q)   (maps R to (0, inf))"
     else:
-        if _choice == "affine":
-            _inputs = [("Q(p) = logit", _logit)]
-            _out = 2.0 + 1.5 * _logit
-            _title = "Affine shift:  2 + 1.5*Q(p)   (b > 0)"
-        elif _choice == "reflection":
-            _inputs = [("Q(p) = R¹(p)", _R)]
-            _out = -(-np.log(1 - (1 - _p)))  # -Q(1-p) with Q = R¹  ->  ln(p)
-            _title = "Reflection:  -Q(1-p)"
-        elif _choice == "addition":
-            _inputs = [("Q₁ = R¹", _R), ("Q₂ = L¹", _L)]
-            _out = _R + _L
-            _title = "Addition:  Q₁ + Q₂  =  logit"
-        elif _choice == "poscomb":
-            _inputs = [("Q₁ = logit", _logit), ("Q₂ = R¹", _R)]
-            _out = 1.0 * _logit + 0.5 * _R
-            _title = "Positive combination:  1*Q₁ + 0.5*Q₂"
-        else:  # product
-            _inputs = [("Q₁ = R¹ (>=0)", _R), ("Q₂ = p (>=0)", _unif)]
-            _out = _R * _unif
-            _title = "Product:  Q₁*Q₂  (both >= 0 on (0,1))"
-
         for _lbl, _v in _inputs:
             ax_tr.plot(_p, _v, linestyle="--", alpha=0.75, linewidth=1.2, label=_lbl)
-        ax_tr.plot(_p, _out, color="tab:green", linewidth=2.4, label="result")
+        ax_tr.plot(_p, _out, color=_res_color, linewidth=2.4, label="result")
         ax_tr.set_ylabel("quantile value")
         ax_tr.legend(fontsize=8)
 
-    _mono = bool(np.all(np.diff(_out) >= -1e-9))
     ax_tr.axhline(0, color="gray", linewidth=0.5)
     ax_tr.set_xlabel("p")
     ax_tr.set_title(
-        f"{_title}\nresult strictly increasing: {'yes' if _mono else 'no'}",
-        fontsize=9,
+        f"{_title}\nstrictly increasing: {'YES — valid' if _valid else 'NO — invalid'}",
+        fontsize=9, color=("black" if _valid else "tab:red"),
     )
     fig_tr.tight_layout()
-    return (fig_tr,)
+
+    _badge = "✅ valid" if _valid else "❌ invalid"
+    tr_status = mo.md(
+        f"""
+        **{_badge}** — result is {'strictly increasing' if _valid else 'not monotone'}.
+
+        - **Condition:** {_cond}
+        - **Sliders:** {_active}
+        """
+    )
+    return fig_tr, tr_status
 
 
 @app.cell
-def _(fig_tr, mo, transform_dropdown):
+def _(fig_tr, mo, ta_p1, ta_p2, transform_dropdown, tr_status):
     _table = mo.md(r"""
     | Transformation | Form | Condition |
     |----------------|------|-----------|
@@ -308,8 +356,13 @@ def _(fig_tr, mo, transform_dropdown):
     | Product | Q₁(p)·Q₂(p) | both ≥ 0 on (0,1) |
     | Monotone map | T(Q(p)) | T non-decreasing |
     """)
-    _panel = mo.vstack([transform_dropdown, fig_tr])
-    mo.hstack([_table, _panel], widths=[0.45, 0.55], gap=2, align="center")
+    _panel = mo.vstack([
+        transform_dropdown,
+        mo.hstack([ta_p1, ta_p2], justify="start", gap=1.5),
+        fig_tr,
+        tr_status,
+    ])
+    mo.hstack([_table, _panel], widths=[0.4, 0.6], gap=2, align="center")
     return
 
 
