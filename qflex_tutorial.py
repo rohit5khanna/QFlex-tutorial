@@ -215,10 +215,11 @@ def _(mo):
     use the dropdown on the right to **visualise** each one (building blocks dashed, result in
     green).
 
-    Most rules come with a **condition**. Use the two parameter sliders (θ₁, θ₂) to push each
-    rule across its boundary and watch the result flip between **valid** (strictly increasing) and
-    **invalid** (non-monotone). The two unconditional rules — *reflection* and *addition* — stay
-    valid no matter what, so their sliders have no effect, which is itself the point.
+    Most rules come with a **condition**. Each rule shows sliders for *its own* parameters
+    (e.g. the slope `b` of the affine map, the weights `a, b` of a combination). Push them across
+    the boundary and watch the result flip between **valid** (strictly increasing) and **invalid**
+    (non-monotone). The two unconditional rules — *reflection* and *addition* — have no free
+    parameter, so no sliders appear; they stay valid no matter what, which is itself the point.
     """)
     return
 
@@ -242,68 +243,70 @@ def _(mo):
 
 @app.cell
 def _(mo):
-    ta_p1 = mo.ui.slider(
-        -2.0, 3.0, value=1.5, step=0.25,
-        label="θ₁", show_value=True,
-    )
-    ta_p2 = mo.ui.slider(
-        -2.0, 3.0, value=1.0, step=0.25,
-        label="θ₂", show_value=True,
-    )
-    return ta_p1, ta_p2
+    # Each transformation gets sliders for ITS own parameters, labelled by the
+    # symbol used in the rule. Only the relevant ones are shown for each choice.
+    aff_a = mo.ui.slider(-2.0, 3.0, value=2.0, step=0.25, show_value=True,
+                         label="a  (shift — never affects validity)")
+    aff_b = mo.ui.slider(-2.0, 3.0, value=1.5, step=0.25, show_value=True,
+                         label="b  (slope — valid iff b > 0)")
+    pc_a = mo.ui.slider(-2.0, 3.0, value=1.0, step=0.25, show_value=True,
+                        label="a  (weight on Q₁ — valid iff a > 0)")
+    pc_b = mo.ui.slider(-2.0, 3.0, value=0.5, step=0.25, show_value=True,
+                        label="b  (weight on Q₂ — valid iff b > 0)")
+    prod_c = mo.ui.slider(-1.0, 1.0, value=0.5, step=0.1, show_value=True,
+                          label="c  (shift of 2nd factor — valid iff factor ≥ 0)")
+    mono_s = mo.ui.slider(-2.0, 2.0, value=1.0, step=0.25, show_value=True,
+                          label="s  (rate in T(y)=exp(s·y) — valid iff s > 0)")
+    return aff_a, aff_b, mono_s, pc_a, pc_b, prod_c
 
 
 @app.cell
-def _(mo, np, plt, ta_p1, ta_p2, transform_dropdown):
+def _(aff_a, aff_b, mo, mono_s, np, pc_a, pc_b, plt, prod_c, transform_dropdown):
     _p = np.linspace(0.001, 0.999, 400)
     _R = -np.log(1 - _p)            # right-tail exponential R¹
     _L = np.log(_p)                 # left-tail reflected exponential L¹
     _logit = np.log(_p / (1 - _p))  # logistic quantile function
     _unif = _p.copy()               # uniform(0,1) quantile function
     _choice = transform_dropdown.value
-    _t1 = float(ta_p1.value)
-    _t2 = float(ta_p2.value)
 
     fig_tr, ax_tr = plt.subplots(figsize=(6, 4.3))
     _monotone_map = (_choice == "monotone")
 
     if _choice == "affine":
+        _a, _b = float(aff_a.value), float(aff_b.value)
         _inputs = [("Q(p) = logit", _logit)]
-        _out = _t2 + _t1 * _logit
-        _title = f"Affine shift:  {_t2:.2f} + {_t1:.2f}·Q(p)"
-        _cond = "valid ⇔ slope θ₁ > 0  (θ₂ only shifts, never breaks validity)"
-        _active = "**θ₁** = slope b   ·   **θ₂** = shift a"
+        _out = _a + _b * _logit
+        _title = f"Affine shift:  {_a:.2f} + {_b:.2f}·Q(p)"
+        _cond = "valid ⇔ slope b > 0  (a only shifts, never breaks validity)"
     elif _choice == "reflection":
         _inputs = [("Q(p) = R¹(p)", _R)]
         _out = _L  # −Q(1−p) with Q = R¹  →  ln(p)
         _title = "Reflection:  −Q(1−p)"
         _cond = "unconditionally valid — no parameter can break it"
-        _active = "*no active parameters* (sliders have no effect here)"
     elif _choice == "addition":
         _inputs = [("Q₁ = R¹", _R), ("Q₂ = L¹", _L)]
         _out = _R + _L
         _title = "Addition:  Q₁ + Q₂ = logit"
         _cond = "unconditionally valid — sum of valid QFs is always valid"
-        _active = "*no active parameters* (sliders have no effect here)"
     elif _choice == "poscomb":
+        _a, _b = float(pc_a.value), float(pc_b.value)
         _inputs = [("Q₁ = logit", _logit), ("Q₂ = R¹", _R)]
-        _out = _t1 * _logit + _t2 * _R
-        _title = f"Combination:  {_t1:.2f}·Q₁ + {_t2:.2f}·Q₂"
-        _cond = "valid ⇔ θ₁ ≥ 0 AND θ₂ ≥ 0  (a negative weight can tip it)"
-        _active = "**θ₁** = weight on Q₁   ·   **θ₂** = weight on Q₂"
+        _out = _a * _logit + _b * _R
+        _title = f"Combination:  {_a:.2f}·Q₁ + {_b:.2f}·Q₂"
+        _cond = "valid ⇔ a > 0 AND b > 0  (a negative weight can tip it)"
     elif _choice == "product":
-        _f2 = _unif + _t1
-        _inputs = [("Q₁ = R¹ (≥0)", _R), (f"Q₂ = p + {_t1:.2f}", _f2)]
+        _c = float(prod_c.value)
+        _f2 = _unif + _c
+        _inputs = [("Q₁ = R¹ (≥0)", _R), (f"Q₂ = p + {_c:.2f}", _f2)]
         _out = _R * _f2
-        _title = f"Product:  R¹ · (p + {_t1:.2f})"
-        _cond = "valid ⇔ both factors ≥ 0 on (0,1)  ⇔  θ₁ ≥ 0"
-        _active = "**θ₁** = shift of 2nd factor (push it below 0 to break it)"
+        _title = f"Product:  R¹ · (p + {_c:.2f})"
+        _cond = "valid ⇔ both factors ≥ 0 on (0,1)  ⇔  c ≥ 0"
     else:  # monotone
+        _s = float(mono_s.value)
         _inputs = [("Q(p) = logit", _logit)]
-        _out = np.exp(_t1 * _logit)
-        _title = f"Monotone map:  T(Q) = exp({_t1:.2f}·Q)"
-        _cond = "valid ⇔ T non-decreasing  ⇔  θ₁ > 0"
-        _active = "**θ₁** = rate in T(y) = exp(θ₁·y)"
+        _out = np.exp(_s * _logit)
+        _title = f"Monotone map:  T(Q) = exp({_s:.2f}·Q)"
+        _cond = "valid ⇔ T non-decreasing  ⇔  s > 0"
 
     _valid = bool(np.all(np.diff(_out) > 0))
     _res_color = "tab:green" if _valid else "tab:red"
@@ -338,14 +341,14 @@ def _(mo, np, plt, ta_p1, ta_p2, transform_dropdown):
         **{_badge}** — result is {'strictly increasing' if _valid else 'not monotone'}.
 
         - **Condition:** {_cond}
-        - **Sliders:** {_active}
         """
     )
     return fig_tr, tr_status
 
 
 @app.cell
-def _(fig_tr, mo, ta_p1, ta_p2, transform_dropdown, tr_status):
+def _(aff_a, aff_b, fig_tr, mo, mono_s, pc_a, pc_b, prod_c,
+      transform_dropdown, tr_status):
     _table = mo.md(r"""
     | Transformation | Form | Condition |
     |----------------|------|-----------|
@@ -356,9 +359,18 @@ def _(fig_tr, mo, ta_p1, ta_p2, transform_dropdown, tr_status):
     | Product | Q₁(p)·Q₂(p) | both ≥ 0 on (0,1) |
     | Monotone map | T(Q(p)) | T non-decreasing |
     """)
+    # show only the parameter sliders that belong to the selected rule
+    _controls_map = {
+        "affine": mo.vstack([aff_a, aff_b]),
+        "reflection": mo.md("*Reflection has no free parameter — it is always valid.*"),
+        "addition": mo.md("*Addition has no free parameter — it is always valid.*"),
+        "poscomb": mo.vstack([pc_a, pc_b]),
+        "product": mo.vstack([prod_c]),
+        "monotone": mo.vstack([mono_s]),
+    }
     _panel = mo.vstack([
         transform_dropdown,
-        mo.hstack([ta_p1, ta_p2], justify="start", gap=1.5),
+        _controls_map[transform_dropdown.value],
         fig_tr,
         tr_status,
     ])
