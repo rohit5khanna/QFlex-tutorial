@@ -207,6 +207,27 @@ def _(cost_err, fig_cost, mo, qf_cost):
 @app.cell
 def _(mo):
     mo.md(r"""
+    **In the `qflex` library.** Fit straight from assessed percentiles, then evaluate:
+
+    ```python
+    from qflex import QFlex
+
+    qf = QFlex([530, 620, 810], [0.10, 0.50, 0.90])  # default terms=3 → exact for 3 points
+
+    qf.quantile(0.5)   # Q(p): value at a probability (here the median)
+    qf.pdf(0.5)        # implied density  f = 1 / q(p)
+    qf.cdf(620)        # cumulative probability at x
+    qf.sample(1000)    # draw random samples
+    qf.moments()       # mean, std, skewness, kurtosis
+    qf.summary()       # text summary;  qf.plot() draws Q(p) and the PDF
+    ```
+    """)
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
     ## Part A — Constructing valid quantile functions  *(paper §2)*
 
     A function \(Q\) is a **valid quantile function** if it is continuous and strictly increasing
@@ -529,6 +550,15 @@ def _(mo):
 
     Because every column of \(Y\) is a valid quantile function, the fit is monotone whenever the
     coefficient signs cooperate (the subject of Part C).
+
+    **In the `qflex` library.** The truncation order is the `terms` argument (center terms switch
+    on from 4 upward):
+
+    ```python
+    qf = QFlex(x, p, terms=7)     # 7-term fit: a0, R1, L1, C1, R2, L2, C2
+    qf.coefficients               # the fitted coefficient vector a
+    qf.gamma                      # data-driven center γ
+    ```
     """)
     return
 
@@ -768,6 +798,21 @@ def _(mo):
     allows arbitrarily large *positive* ones (which forces unimodality); Proposition 4 allows
     *moderately negative* center coefficients but caps their magnitude. Both sit strictly inside the
     exact valid set, which has no closed form.
+
+    **In the `qflex` library.** Pass a `constraint_type` to *enforce* validity at fit time, or
+    certify a fit afterward:
+
+    ```python
+    from qflex import QFlex, ConstraintType, check_delta_p_monotonicity
+
+    QFlex(x, p, terms=K, constraint_type=ConstraintType.A)    # Theorem 1: all shape coeffs ≥ 0
+    QFlex(x, p, terms=K, constraint_type=ConstraintType.TC)   # Proposition 4: tail–center LP
+    # other sets: ConstraintType.TL, ConstraintType.TA, ConstraintType.TC_MAG (Proposition 3)
+
+    qf.is_feasible                            # validity checked directly on q(p)
+    qf.check_proposition4()                   # tail/center margins (Propositions 3 & 4)
+    check_delta_p_monotonicity(qf.quantile)   # δ-p monotonicity test (Definition 4)
+    ```
     """)
     return
 
@@ -1665,6 +1710,17 @@ def _(mo):
     i.e. the average absolute quantile error as a fraction of the central 10–90 range. When both
     systems are valid, the ratio \(R_1 = W_1^{\text{Metalog}} / W_1^{\text{QFlex}}\) reports how
     many times larger Metalog's error is than QFlex's.
+
+    **In the `qflex` library.** Measure accuracy with `compute_w1`:
+
+    ```python
+    from qflex import QFlex
+    from qflex.utils import compute_w1
+
+    qf = QFlex(x, p, terms=K)
+    compute_w1(qf.quantile, x, p)    # normalized W1 error against the assessments
+    ```
+    *(Metalog fits here use the vendored `_metalog` package purely for side-by-side comparison.)*
     """)
     return
 
@@ -1978,6 +2034,16 @@ def _(mo):
     to a linear interpolation of the seven points) and, for QFlex, the **tail–center margin**
     \(m_{TC} = m_{\text{tail}} - M_{\text{center}}\): slack (\(>0\)), binding (\(=0\)), or
     violated (\(<0\)).
+
+    **In the `qflex` library.** The three QFlex models map directly to constructor arguments:
+
+    ```python
+    from qflex import QFlex, ConstraintType
+
+    QFlex(x, p, terms=K)                                     # QFlex (unconstrained)
+    QFlex(x, p, terms=K, constraint_type=ConstraintType.A)   # QFlex+  (Theorem 1)
+    QFlex(x, p, terms=K, constraint_type=ConstraintType.TC)  # QFlexTC (Proposition 4)
+    ```
     """)
     return
 
@@ -2174,20 +2240,20 @@ def _(mo):
     mo.md(r"""
     ### Using the `qflex` library — quick reference
 
-    A compact map from the paper's ideas to the API exercised throughout this notebook:
+    A recap of the API introduced section-by-section above (each call appears in the part noted):
 
-    | Task | Library call |
-    |---|---|
-    | Fit from percentiles | `QFlex(x, p, terms=K)` |
-    | Semi-bounded / bounded support | `LogQFlex(x, p, lower_bound=l)` · `LogitQFlex(x, p, l, u)` |
-    | Enforce validity (Theorem 1) | `QFlex(x, p, terms=K, constraint_type=ConstraintType.A)` |
-    | Enforce validity (Proposition 4) | `QFlex(x, p, terms=K, constraint_type=ConstraintType.TC)` |
-    | Other constraint sets | `ConstraintType.TL` · `ConstraintType.TA` · `ConstraintType.TC_MAG` |
-    | Evaluate | `qf.quantile(p)` · `qf.pdf(p)` · `qf.cdf(x)` · `qf.sample(n)` |
-    | Summaries | `qf.moments()` · `qf.summary()` · `qf.plot()` |
-    | Check monotonicity (δ-p) | `check_delta_p_monotonicity(qf.quantile)` |
-    | Tail–center certificate | `qf.check_proposition4()` · `tail_center_margin_coeff(...)` |
-    | Accuracy (normalized W₁) | `compute_w1(qf.quantile, x, p)` |
+    | Task | Library call | Part |
+    |---|---|---|
+    | Fit from percentiles | `QFlex(x, p, terms=K)` | 1, B |
+    | Semi-bounded / bounded support | `LogQFlex(x, p, lower_bound=l)` · `LogitQFlex(x, p, l, u)` | E |
+    | Enforce validity (Theorem 1) | `QFlex(x, p, terms=K, constraint_type=ConstraintType.A)` | C, G |
+    | Enforce validity (Proposition 4) | `QFlex(x, p, terms=K, constraint_type=ConstraintType.TC)` | C, G |
+    | Other constraint sets | `ConstraintType.TL` · `ConstraintType.TA` · `ConstraintType.TC_MAG` | C |
+    | Evaluate | `qf.quantile(p)` · `qf.pdf(p)` · `qf.cdf(x)` · `qf.sample(n)` | 1 |
+    | Summaries | `qf.moments()` · `qf.summary()` · `qf.plot()` | 1 |
+    | Check monotonicity (δ-p) | `check_delta_p_monotonicity(qf.quantile)` | C |
+    | Tail–center certificate | `qf.check_proposition4()` · `tail_center_margin_coeff(...)` | C |
+    | Accuracy (normalized W₁) | `compute_w1(qf.quantile, x, p)` | F |
 
     Defaults: `terms=3` (exact for three-point P10/P50/P90 elicitations) and the constrained
     tail–center solver uses the linear (CVXPY) formulation.
