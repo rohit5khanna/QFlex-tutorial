@@ -196,7 +196,7 @@ def _(cost_err, fig_cost, mo, qf_cost):
             - centering parameter γ = **{qf_cost.gamma:.4f}**
             - valid (feasible) distribution = **{qf_cost.is_feasible}**
             - max interpolation error = **{cost_err:.2e}** (exact, since terms = points = 3)
-            - basis terms used: **a₀, R¹, L¹** (intercept + first-order right/left tails)
+            - basis terms used: **a₀, R₁, L₁** (intercept + first-order right/left tails)
             """
         ),
         fig_cost,
@@ -263,8 +263,8 @@ def _(mo):
 @app.cell
 def _(aff_a, aff_b, mo, mono_s, np, pc_a, pc_b, plt, prod_c, transform_dropdown):
     _p = np.linspace(0.001, 0.999, 400)
-    _R = -np.log(1 - _p)            # right-tail exponential R¹
-    _L = np.log(_p)                 # left-tail reflected exponential L¹
+    _R = -np.log(1 - _p)            # right-tail exponential R₁
+    _L = np.log(_p)                 # left-tail reflected exponential L₁
     _logit = np.log(_p / (1 - _p))  # logistic quantile function
     _unif = _p.copy()               # uniform(0,1) quantile function
     _choice = transform_dropdown.value
@@ -279,27 +279,27 @@ def _(aff_a, aff_b, mo, mono_s, np, pc_a, pc_b, plt, prod_c, transform_dropdown)
         _title = f"Affine shift:  {_a:.2f} + {_b:.2f}·Q(p)"
         _cond = "valid ⇔ slope b > 0  (a only shifts, never breaks validity)"
     elif _choice == "reflection":
-        _inputs = [("Q(p) = R¹(p)", _R)]
-        _out = _L  # −Q(1−p) with Q = R¹  →  ln(p)
+        _inputs = [("Q(p) = R₁(p)", _R)]
+        _out = _L  # −Q(1−p) with Q = R₁  →  ln(p)
         _title = "Reflection:  −Q(1−p)"
         _cond = "unconditionally valid — no parameter can break it"
     elif _choice == "addition":
-        _inputs = [("Q₁ = R¹", _R), ("Q₂ = L¹", _L)]
+        _inputs = [("Q₁ = R₁", _R), ("Q₂ = L₁", _L)]
         _out = _R + _L
         _title = "Addition:  Q₁ + Q₂ = logit"
         _cond = "unconditionally valid — sum of valid QFs is always valid"
     elif _choice == "poscomb":
         _a, _b = float(pc_a.value), float(pc_b.value)
-        _inputs = [("Q₁ = logit", _logit), ("Q₂ = R¹", _R)]
+        _inputs = [("Q₁ = logit", _logit), ("Q₂ = R₁", _R)]
         _out = _a * _logit + _b * _R
         _title = f"Combination:  {_a:.2f}·Q₁ + {_b:.2f}·Q₂"
         _cond = "valid ⇔ a > 0 AND b > 0  (a negative weight can tip it)"
     elif _choice == "product":
         _c = float(prod_c.value)
         _f2 = _unif + _c
-        _inputs = [("Q₁ = R¹ (≥0)", _R), (f"Q₂ = p + {_c:.2f}", _f2)]
+        _inputs = [("Q₁ = R₁ (≥0)", _R), (f"Q₂ = p + {_c:.2f}", _f2)]
         _out = _R * _f2
-        _title = f"Product:  R¹ · (p + {_c:.2f})"
+        _title = f"Product:  R₁ · (p + {_c:.2f})"
         _cond = "valid ⇔ both factors ≥ 0 on (0,1)  ⇔  c ≥ 0"
     else:  # monotone
         _s = float(mono_s.value)
@@ -402,15 +402,15 @@ def _(np, plt):
     _logit = _R + _L               # = ln(p/(1-p)), the logistic quantile function
 
     fig_build, axes_build = plt.subplots(1, 2, figsize=(11, 4))
-    axes_build[0].plot(_p, _R, label="R¹(p) = −ln(1−p)", color="tab:blue")
-    axes_build[0].plot(_p, _L, label="L¹(p) = ln(p)", color="tab:orange")
+    axes_build[0].plot(_p, _R, label="R₁(p) = −ln(1−p)", color="tab:blue")
+    axes_build[0].plot(_p, _L, label="L₁(p) = ln(p)", color="tab:orange")
     axes_build[0].axhline(0, color="gray", linewidth=0.6)
     axes_build[0].set_title("Two valid (monotone) tail bases")
     axes_build[0].set_xlabel("p")
     axes_build[0].legend(fontsize=8)
 
     axes_build[1].plot(_p, _logit, color="tab:green", linewidth=2,
-                       label="R¹ + L¹ = ln(p/(1−p))")
+                       label="R₁ + L₁ = ln(p/(1−p))")
     axes_build[1].axhline(0, color="gray", linewidth=0.6)
     axes_build[1].set_title("Their sum is the logistic QF (Addition Rule)")
     axes_build[1].set_xlabel("p")
@@ -423,8 +423,8 @@ def _(np, plt):
 def _(fig_build, mo):
     mo.vstack([
         mo.md(
-            "**Addition Rule in action.** Adding the right-tail exponential R¹ and the "
-            "left-tail reflected exponential L¹ — both strictly increasing — yields the logistic "
+            "**Addition Rule in action.** Adding the right-tail exponential R₁ and the "
+            "left-tail reflected exponential L₁ — both strictly increasing — yields the logistic "
             "quantile function. Every QFlex model is built this way, so validity is automatic."
         ),
         fig_build,
@@ -547,7 +547,7 @@ def _(
     _a = qf_cost.coefficients
     _q = _Y @ _a
     _struct = get_term_structure(qf_cost.terms)
-    _names = {"constant": "1 (a₀)", "f1": "R¹=−ln(1−p)", "f2": "L¹=ln(p)", "f3": "C¹=(p−γ)"}
+    _names = {"constant": "1 (a₀)", "f1": "R₁=−ln(1−p)", "f2": "L₁=ln(p)", "f3": "C₁=(p−γ)"}
     _hdr = " | ".join(_names[bt.value] for bt, _ in _struct)
     _rows = []
     for _i, _p in enumerate(p_cost):
@@ -563,8 +563,8 @@ def _(
         f"**Design matrix for the facility-cost fit** (γ = {qf_cost.gamma:.3f}, "
         f"{qf_cost.terms} terms). Each row evaluates Q(p) = Y·a and recovers the data exactly:\n\n"
         f"{_table}\n\n"
-        f"Fitted coefficients: **{_coef}**. The intercept sets the location, the R¹ coefficient "
-        "stretches the upper tail, and the L¹ coefficient stretches the lower tail."
+        f"Fitted coefficients: **{_coef}**. The intercept sets the location, the R₁ coefficient "
+        "stretches the upper tail, and the L₁ coefficient stretches the lower tail."
     )
     return
 
