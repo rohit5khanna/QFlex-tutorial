@@ -23,15 +23,15 @@ def _(mo):
     > [SSRN 5930859](https://ssrn.com/abstract=5930859) ·
     > [DOI 10.2139/ssrn.5930859](http://dx.doi.org/10.2139/ssrn.5930859)
 
-    QFlex is a **quantile-parameterized distribution (QPD)** built entirely from *monotone
+    QFlex is a quantile-parameterized distribution (QPD) built entirely from *monotone
     transformations of valid quantile functions*. Unlike the Metalog, which can produce
     non-monotone (invalid) fits and requires ex-post numerical repair, QFlex remains a valid
     distribution under simple, analytic coefficient conditions.
 
-    It is also a **hands-on tutorial for the `qflex` Python library, developed by Rohit Khanna.**
+    It is also a hands-on tutorial for the `qflex` Python library, developed by Rohit Khanna.
     Beyond explaining the theory, every section shows the exact library calls for the method it
-    discusses, so that by the end you can **fit, validate, and explore QFlex distributions on your
-    own data**.
+    discusses, so that by the end you can fit, validate, and explore QFlex distributions on your
+    own data.
 
     Each part below mirrors a section of the paper and adds interactive exploration:
 
