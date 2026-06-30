@@ -817,7 +817,7 @@ def _(
                            fontsize=9)
     axes_base[0].set_xlabel("p")
     axes_base[0].set_ylabel("x")
-    axes_base[0].set_ylim(min(x_base) - 8, max(x_base) + 9)  # focus on data; tails blow up off-screen
+    axes_base[0].set_ylim(min(x_base) - 30, max(x_base) + 35)  # wider window shows the overfit wiggle; tails still blow up off-screen
     axes_base[0].legend(fontsize=8)
 
     axes_base[1].plot(_p, _qt, color="tab:blue", lw=1.4, label="q_tail")
@@ -856,15 +856,16 @@ def _(fig_base, mo):
 def _(ConstraintType, mo):
     c_constraint_dropdown = mo.ui.dropdown(
         options={
-            "None — unconstrained (baseline)": ConstraintType.NONE,
+            "None — unconstrained QFlex (baseline)": ConstraintType.NONE,
             "A+ — Theorem 1 (all shape coeffs ≥ 0)": ConstraintType.A,
             "TL+ — Theorem 5 (leading tails ≥ 0)": ConstraintType.TL,
             "TA+ — all tail coeffs ≥ 0": ConstraintType.TA,
             "TC_mag — Proposition 3 (grid certificate)": ConstraintType.TC_MAG,
             "TC — Proposition 4 (coefficient bound, LP)": ConstraintType.TC,
+            "Metalog — Keelin (2016), no validity constraint": "METALOG",
         },
-        value="None — unconstrained (baseline)",
-        label="Constraint",
+        value="None — unconstrained QFlex (baseline)",
+        label="QPD with constraints",
     )
     return (c_constraint_dropdown,)
 
@@ -872,6 +873,7 @@ def _(ConstraintType, mo):
 @app.cell
 def _(
     BasisType,
+    Metalog,
     QFlex,
     c_constraint_dropdown,
     evaluate_basis_derivative,
@@ -885,78 +887,133 @@ def _(
 ):
     import warnings as _w
 
-    _ct = c_constraint_dropdown.value
-    _err = None
-    try:
-        with _w.catch_warnings():
-            _w.simplefilter("ignore")
-            _qf = QFlex(x_base, p_base, terms=7, constraint_type=_ct)
-    except Exception as _e:  # constraint may be infeasible for some configs
-        _qf = None
-        _err = str(_e)
+    _sel = c_constraint_dropdown.value
 
-    if _qf is None:
-        fig_constraint, _ax = plt.subplots(figsize=(6, 2))
-        _ax.axis("off")
-        _ax.text(0.5, 0.5, "Constraint solve failed:\n" + _err, ha="center", va="center",
-                 fontsize=9, color="firebrick")
-        c_status = mo.md(f"**{_ct.value}** could not be solved: {_err}")
+    if _sel == "METALOG":
+        # Metalog is a different QPD with NO validity constraint — shown for contrast.
+        _merr = None
+        try:
+            with _w.catch_warnings():
+                _w.simplefilter("ignore")
+                _ml = Metalog(x_base, p_base, terms=7)
+        except Exception as _e:
+            _ml = None
+            _merr = str(_e)
+
+        if _ml is None:
+            fig_constraint, _axm = plt.subplots(figsize=(6, 2))
+            _axm.axis("off")
+            _axm.text(0.5, 0.5, "Metalog fit failed:\n" + _merr, ha="center", va="center",
+                      fontsize=9, color="firebrick")
+            c_status = mo.md(f"**Metalog** could not be fit: {_merr}")
+        else:
+            _pm = np.linspace(0.005, 0.995, 500)
+            _Qm = _ml.quantile(_pm)
+            _qm = np.gradient(_Qm, _pm)
+            _coefs = np.asarray(_ml.coefficients, dtype=float)
+            _mlabels = [f"a{_j + 1}" for _j in range(len(_coefs))]
+
+            fig_constraint, _axc = plt.subplots(1, 2, figsize=(12, 4.2))
+            _axc[0].plot(_pm, _qm, color="black", lw=2, label="q(p)")
+            _axc[0].axhline(0, color="red", lw=0.9, ls="--")
+            _axc[0].fill_between(_pm, _qm, 0, where=_qm < 0, color="red", alpha=0.2,
+                                 label="q(p) < 0  (invalid)")
+            _lim = float(np.percentile(np.abs(_qm), 92)) or 1.0
+            _axc[0].set_ylim(-_lim, _lim)
+            _axc[0].set_title("Metalog quantile density q(p)  (no tail/center split)", fontsize=9)
+            _axc[0].set_xlabel("p")
+            _axc[0].legend(fontsize=8)
+
+            _axc[1].bar(range(len(_mlabels)), _coefs, color="tab:purple")
+            _axc[1].axhline(0, color="gray", lw=0.6)
+            _axc[1].set_xticks(range(len(_mlabels)))
+            _axc[1].set_xticklabels(_mlabels)
+            _axc[1].set_title("Metalog coefficients (a-vector)", fontsize=9)
+            fig_constraint.tight_layout()
+
+            _sse = float(np.sum((_ml.quantile(np.asarray(p_base)) - np.asarray(x_base)) ** 2))
+            c_status = mo.md(
+                "| metric | value | meaning |\n|---|---|---|\n"
+                f"| **feasible** | **{_ml.is_feasible}** | valid PDF everywhere (ground truth) |\n"
+                f"| SSE (fit) | {_sse:.2f} | lower = closer to the data |\n"
+                f"| min q(p) | {_qm.min():.3f} | must be > 0 for validity |\n"
+                "\n*Metalog has **no built-in monotonicity constraint**. Like the unconstrained "
+                "QFlex baseline, its 7-term interpolating fit can be **infeasible** (q(p) dips < 0) "
+                "— the very issue the QFlex constraints above are designed to remove.*"
+            )
     else:
-        _p = np.linspace(0.005, 0.995, 500)
-        _qt = np.zeros_like(_p)
-        _qc = np.zeros_like(_p)
-        _labels, _colors = [], []
-        for _idx, (_bt, _o) in enumerate(get_term_structure(7)):
-            _d = evaluate_basis_derivative(_p, _bt, _o, _qf.gamma)
-            if _bt == BasisType.CONSTANT:
-                _labels.append("a₀"); _colors.append("gray")
-            elif _bt == BasisType.F1_TAIL_RIGHT:
-                _qt += _qf.coefficients[_idx] * _d
-                _labels.append(f"R{_o}"); _colors.append("tab:blue")
-            elif _bt == BasisType.F2_TAIL_LEFT:
-                _qt += _qf.coefficients[_idx] * _d
-                _labels.append(f"L{_o}"); _colors.append("tab:cyan")
-            else:
-                _qc += _qf.coefficients[_idx] * _d
-                _labels.append(f"C{_o}"); _colors.append("tab:orange")
-        _qfull = _qt + _qc
+        _ct = _sel
+        _err = None
+        try:
+            with _w.catch_warnings():
+                _w.simplefilter("ignore")
+                _qf = QFlex(x_base, p_base, terms=7, constraint_type=_ct)
+        except Exception as _e:  # constraint may be infeasible for some configs
+            _qf = None
+            _err = str(_e)
 
-        fig_constraint, _axc = plt.subplots(1, 2, figsize=(12, 4.2))
-        _axc[0].plot(_p, _qt, color="tab:blue", lw=1.4, label="q_tail")
-        _axc[0].plot(_p, _qc, color="tab:orange", lw=1.4, label="q_center")
-        _axc[0].plot(_p, _qfull, color="black", lw=2, label="q(p)")
-        _axc[0].axhline(0, color="red", lw=0.9, ls="--")
-        _axc[0].fill_between(_p, _qfull, 0, where=_qfull < 0, color="red", alpha=0.2)
-        _lim = float(np.percentile(np.abs(_qfull), 92)) or 1.0
-        _axc[0].set_ylim(-_lim, _lim)
-        _axc[0].set_title(f"QDF decomposition — {_ct.value}", fontsize=9)
-        _axc[0].set_xlabel("p")
-        _axc[0].legend(fontsize=8)
+        if _qf is None:
+            fig_constraint, _ax = plt.subplots(figsize=(6, 2))
+            _ax.axis("off")
+            _ax.text(0.5, 0.5, "Constraint solve failed:\n" + _err, ha="center", va="center",
+                     fontsize=9, color="firebrick")
+            c_status = mo.md(f"**{_ct.value}** could not be solved: {_err}")
+        else:
+            _p = np.linspace(0.005, 0.995, 500)
+            _qt = np.zeros_like(_p)
+            _qc = np.zeros_like(_p)
+            _labels, _colors = [], []
+            for _idx, (_bt, _o) in enumerate(get_term_structure(7)):
+                _d = evaluate_basis_derivative(_p, _bt, _o, _qf.gamma)
+                if _bt == BasisType.CONSTANT:
+                    _labels.append("a₀"); _colors.append("gray")
+                elif _bt == BasisType.F1_TAIL_RIGHT:
+                    _qt += _qf.coefficients[_idx] * _d
+                    _labels.append(f"R{_o}"); _colors.append("tab:blue")
+                elif _bt == BasisType.F2_TAIL_LEFT:
+                    _qt += _qf.coefficients[_idx] * _d
+                    _labels.append(f"L{_o}"); _colors.append("tab:cyan")
+                else:
+                    _qc += _qf.coefficients[_idx] * _d
+                    _labels.append(f"C{_o}"); _colors.append("tab:orange")
+            _qfull = _qt + _qc
 
-        _axc[1].bar(range(len(_labels)), _qf.coefficients, color=_colors)
-        _axc[1].axhline(0, color="gray", lw=0.6)
-        _axc[1].set_xticks(range(len(_labels)))
-        _axc[1].set_xticklabels(_labels)
-        _axc[1].set_title("Fitted coefficients (blue/cyan=tail, orange=center)", fontsize=9)
-        fig_constraint.tight_layout()
+            fig_constraint, _axc = plt.subplots(1, 2, figsize=(12, 4.2))
+            _axc[0].plot(_p, _qt, color="tab:blue", lw=1.4, label="q_tail")
+            _axc[0].plot(_p, _qc, color="tab:orange", lw=1.4, label="q_center")
+            _axc[0].plot(_p, _qfull, color="black", lw=2, label="q(p)")
+            _axc[0].axhline(0, color="red", lw=0.9, ls="--")
+            _axc[0].fill_between(_p, _qfull, 0, where=_qfull < 0, color="red", alpha=0.2)
+            _lim = float(np.percentile(np.abs(_qfull), 92)) or 1.0
+            _axc[0].set_ylim(-_lim, _lim)
+            _axc[0].set_title(f"QDF decomposition — {_ct.value}", fontsize=9)
+            _axc[0].set_xlabel("p")
+            _axc[0].legend(fontsize=8)
 
-        _pr = _qf.check_proposition4()
-        _p4 = tail_center_margin_coeff(_qf.coefficients, 7, _qf.gamma)
-        _sse = float(np.sum((_qf.quantile(np.asarray(p_base)) - np.asarray(x_base)) ** 2))
-        c_status = mo.md(
-            f"| metric | value | meaning |\n|---|---|---|\n"
-            f"| **feasible** | **{_qf.is_feasible}** | valid PDF everywhere (ground truth) |\n"
-            f"| SSE (fit) | {_sse:.2f} | lower = closer to the data |\n"
-            f"| min q(p) | {_pr['q_flex_min']:.3f} | must be > 0 for validity |\n"
-            f"| m_tail | {_pr['m_tail']:.3f} | smallest tail magnitude |\n"
-            f"| M_center | {_pr['M_center']:.3f} | largest center magnitude |\n"
-            f"| Prop 3 margin (grid) | {_pr['margin']:.3f} | > 0 *certifies* validity (sufficient) |\n"
-            f"| Prop 4 margin (coeff) | {_p4:.3f} | > 0 *certifies* validity (sufficient) |\n"
-            "\n*`feasible` is checked directly on q(p). The Prop 3 / Prop 4 margins are "
-            "**sufficient** certificates: a positive margin guarantees validity, but a "
-            "**negative margin does not imply invalid** — e.g. `A+` is valid via Theorem 1 even "
-            "though both margins are negative.*"
-        )
+            _axc[1].bar(range(len(_labels)), _qf.coefficients, color=_colors)
+            _axc[1].axhline(0, color="gray", lw=0.6)
+            _axc[1].set_xticks(range(len(_labels)))
+            _axc[1].set_xticklabels(_labels)
+            _axc[1].set_title("Fitted coefficients (blue/cyan=tail, orange=center)", fontsize=9)
+            fig_constraint.tight_layout()
+
+            _pr = _qf.check_proposition4()
+            _p4 = tail_center_margin_coeff(_qf.coefficients, 7, _qf.gamma)
+            _sse = float(np.sum((_qf.quantile(np.asarray(p_base)) - np.asarray(x_base)) ** 2))
+            c_status = mo.md(
+                f"| metric | value | meaning |\n|---|---|---|\n"
+                f"| **feasible** | **{_qf.is_feasible}** | valid PDF everywhere (ground truth) |\n"
+                f"| SSE (fit) | {_sse:.2f} | lower = closer to the data |\n"
+                f"| min q(p) | {_pr['q_flex_min']:.3f} | must be > 0 for validity |\n"
+                f"| m_tail | {_pr['m_tail']:.3f} | smallest tail magnitude |\n"
+                f"| M_center | {_pr['M_center']:.3f} | largest center magnitude |\n"
+                f"| Prop 3 margin (grid) | {_pr['margin']:.3f} | > 0 *certifies* validity (sufficient) |\n"
+                f"| Prop 4 margin (coeff) | {_p4:.3f} | > 0 *certifies* validity (sufficient) |\n"
+                "\n*`feasible` is checked directly on q(p). The Prop 3 / Prop 4 margins are "
+                "**sufficient** certificates: a positive margin guarantees validity, but a "
+                "**negative margin does not imply invalid** — e.g. `A+` is valid via Theorem 1 even "
+                "though both margins are negative.*"
+            )
     return c_status, fig_constraint
 
 
@@ -978,7 +1035,11 @@ def _(c_constraint_dropdown, c_status, fig_constraint, mo):
             "*moderately negative* center while still certifying q(p) > 0. The a-priori LP bound "
             "`TC` is the most conservative, so it costs the most fit accuracy.\n\n"
             "Every guarantee trades a little accuracy for validity — compare the **SSE** row across "
-            "constraints (here it climbs `TL+ < TA+ < A+ < TC_mag < TC`)."
+            "constraints (here it climbs `TL+ < TA+ < A+ < TC_mag < TC`).\n\n"
+            "The dropdown also offers **`Metalog`** (Keelin 2016) for contrast: it is a different "
+            "QPD with *no* validity constraint, so its 7-term interpolating fit is **infeasible** "
+            "here — exactly like the unconstrained QFlex — underscoring why these constraints "
+            "matter."
         ),
         c_constraint_dropdown,
         c_status,
@@ -1092,6 +1153,7 @@ def _(evaluate_quantile_derivative, np, plt, qf_cost):
     axA[0].set_title("Quantile density q(p)\n(min at the mode)", fontsize=9)
     axA[0].set_xlabel("p")
     axA[0].set_ylabel("q(p)")
+    axA[0].set_ylim(0, float(np.percentile(_q, 80)))  # clip exploding tails so the bowl is visible
 
     axA[1].plot(_p, _kappa, color="tab:purple", lw=2)
     axA[1].axhline(0, color="red", lw=0.9, ls="--")
@@ -1099,6 +1161,8 @@ def _(evaluate_quantile_derivative, np, plt, qf_cost):
     axA[1].set_title("QCF κ(p) = q'(p)\n(zero crossing − → +)", fontsize=9)
     axA[1].set_xlabel("p")
     axA[1].set_ylabel("κ(p)")
+    _klim_a = float(np.percentile(np.abs(_kappa), 80))  # clip tails so the zero crossing is visible
+    axA[1].set_ylim(-_klim_a, _klim_a)
 
     axA[2].plot(_x, _pdf, color="seagreen", lw=2)
     axA[2].scatter([_x[_imin]], [_pdf[_imin]], color="firebrick", zorder=5)
@@ -1204,6 +1268,9 @@ def _(
     _imin = int(np.argmin(_q))
     _qmin = (np.sqrt(_a2) + np.sqrt(_a3)) ** 2 + a4_slider.value
 
+    _base_qmin = (np.sqrt(_a2) + np.sqrt(_a3)) ** 2   # q_min at a₄ = 0
+    _h0 = 1.0 / _base_qmin                            # mode height at a₄ = 0
+
     fig_a4, axes_a4 = plt.subplots(1, 2, figsize=(12, 4.2))
     axes_a4[0].plot(_p, _q, color="steelblue", lw=2)
     axes_a4[0].axvline(_p[_imin], color="firebrick", ls=":", lw=1)
@@ -1211,10 +1278,13 @@ def _(
     axes_a4[0].set_title(f"q(p):  q_min = (√a₂+√a₃)² + a₄ = {_qmin:.1f}", fontsize=9)
     axes_a4[0].set_xlabel("p")
     axes_a4[0].set_ylabel("q(p)")
+    # fixed window centred on the bowl so the q_min shift (not the tails) is what moves
+    axes_a4[0].set_ylim(-0.5 * _base_qmin, 5.0 * _base_qmin)
 
     if _valid:
         axes_a4[1].plot(_x, _pdf, color="seagreen", lw=2)
-        axes_a4[1].set_ylim(bottom=0)
+    # fixed y-axis: as a₄ grows q_min rises so the peak visibly drops (no rescaling)
+    axes_a4[1].set_ylim(0, 2.5 * _h0)
     axes_a4[1].set_title(
         f"PDF — mode fixed at p*={_p[_imin]:.3f}, height={1.0 / _qmin if _valid else float('nan'):.5f}"
         + ("" if _valid else "  (INVALID: a₄ below threshold)"),
@@ -1314,6 +1384,10 @@ def _(evaluate_quantile, evaluate_quantile_derivative, np, plt):
     axM[0].set_title("QCF κ(p): a negative C₂ adds zero crossings", fontsize=9)
     axM[0].set_xlabel("p")
     axM[0].set_ylabel("κ(p)")
+    # clip the exploding tails so the interior zero crossings of BOTH curves are visible
+    _mask_m = (_p > 0.1) & (_p < 0.9)
+    _klim_m = 1.2 * float(max(np.abs(_ku[_mask_m]).max(), np.abs(_kb[_mask_m]).max()))
+    axM[0].set_ylim(-_klim_m, _klim_m)
     axM[0].legend(fontsize=8)
 
     axM[1].plot(_xu, _fu, color="tab:green", lw=2, label="unimodal")
@@ -1412,6 +1486,7 @@ def _(LogQFlex, QFlex, np, plt):
     axs[1].set_xlabel("x")
     axs[1].set_ylabel("density")
     axs[1].set_ylim(bottom=0)
+    axs[1].set_xlim(0, 100)  # the long right tail runs far past the data; focus near the mass
     fig_semi.tight_layout()
     return (fig_semi,)
 
