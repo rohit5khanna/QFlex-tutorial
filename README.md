@@ -2,9 +2,9 @@
 
 A live, in-browser interactive companion to *The QFlex Distribution* (Bickel et al.),
 built as a [marimo](https://marimo.io) notebook and a tutorial for the
-[`qflex`](https://pypi.org/project/qflex/) Python library.
+[`qflex`](https://github.com/rohit5khanna/qflex) Python library, developed by Rohit Khanna.
 
-**▶ Live notebook:** https://USERNAME.github.io/REPO/  *(update after enabling Pages)*
+**▶ Live notebook:** https://rohit5khanna.github.io/QFlex-tutorial/
 
 The page runs entirely in your browser via WebAssembly (Pyodide) — no server, no
 install. Move the sliders and dropdowns and the figures recompute live.
@@ -35,7 +35,7 @@ git init
 git add .
 git commit -m "QFlex interactive marimo tutorial"
 git branch -M main
-git remote add origin https://github.com/USERNAME/REPO.git
+git remote add origin https://github.com/rohit5khanna/QFlex-tutorial.git
 git push -u origin main
 ```
 

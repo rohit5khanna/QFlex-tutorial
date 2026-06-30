@@ -28,6 +28,11 @@ def _(mo):
     non-monotone (invalid) fits and requires ex-post numerical repair, QFlex remains a valid
     distribution under simple, analytic coefficient conditions.
 
+    It is also a **hands-on tutorial for the `qflex` Python library, developed by Rohit Khanna.**
+    Beyond explaining the theory, every section shows the exact library calls for the method it
+    discusses, so that by the end you can **fit, validate, and explore QFlex distributions on your
+    own data**.
+
     Each part below mirrors a section of the paper and adds interactive exploration:
 
     | Part | Paper section | Topic |
@@ -42,8 +47,9 @@ def _(mo):
     | G | §8 | Demonstrating monotonicity control |
     | H | §9 | Conclusion |
 
-    *Built using the [`qflex`](https://pypi.org/project/qflex/) library; the Metalog comparisons
-    use a vendored copy of a Metalog implementation (`notebooks/_metalog/`).*
+    *Built using the [`qflex`](https://github.com/rohit5khanna/qflex) Python library, developed by
+    Rohit Khanna; the Metalog comparisons use a vendored copy of a Metalog implementation
+    (`notebooks/_metalog/`).*
     """)
     return
 
